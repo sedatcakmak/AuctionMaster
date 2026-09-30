@@ -1,67 +1,42 @@
 package me.qKing12.AuctionMaster.Utils;
 
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import me.qKing12.AuctionMaster.AuctionMaster;
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.inventory.meta.SkullMeta;
-
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.util.UUID;
-
+import org.bukkit.profile.PlayerProfile;
+import org.bukkit.profile.PlayerTextures;
 import static me.qKing12.AuctionMaster.Utils.HeadDatabase.headApi;
+
+
+
 
 public class SkullTexture {
 
-    private static Method GET_PROPERTIES;
-    private static Method INSERT_PROPERTY;
-    private static Constructor<?> GAME_PROFILE_CONSTRUCTOR;
-    private static Constructor<?> PROPERTY_CONSTRUCTOR;
+    private static final Pattern URL_PATTERN = Pattern.compile("\"url\"\\s*:\\s*\"([^\"]+)\"");
 
-    static {
+    /**
+     * takes base64 texture value, textures.minecraft.net url or just the texture hash
+     */
+    private static String skinUrl(String texture) {
+        if (texture.startsWith("http"))
+            return texture;
         try {
-            final Class<?> gameProfile = Class.forName("com.mojang.authlib.GameProfile");
-            final Class<?> property = Class.forName("com.mojang.authlib.properties.Property");
-            final Class<?> propertyMap = Class.forName("com.mojang.authlib.properties.PropertyMap");
-            GAME_PROFILE_CONSTRUCTOR = getConstructor(gameProfile, 2);
-            PROPERTY_CONSTRUCTOR = getConstructor(property, 2);
-            GET_PROPERTIES = getMethod(gameProfile, "getProperties");
-            INSERT_PROPERTY = getMethod(propertyMap, "put");
+            final String json = new String(Base64.getDecoder().decode(texture), StandardCharsets.UTF_8);
+            final Matcher matcher = URL_PATTERN.matcher(json);
+            if (matcher.find())
+                return matcher.group(1);
+        } catch (IllegalArgumentException ignored) {
         }
-        catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public static Method getMethod(final Class<?> clazz, final String name) {
-        for (final Method m : clazz.getMethods()) {
-            if (m.getName().equals(name)) {
-                return m;
-            }
-        }
-        return null;
-    }
-
-    private static Field getField(final Class<?> clazz, final String fieldName) throws NoSuchFieldException {
-        return clazz.getDeclaredField(fieldName);
-    }
-
-    public static void setFieldValue(final Object object, final String fieldName, final Object value) throws NoSuchFieldException, IllegalAccessException {
-        final Field f = getField(object.getClass(), fieldName);
-        f.setAccessible(true);
-        f.set(object, value);
-    }
-
-    public static Constructor<?> getConstructor(final Class<?> clazz, final int numParams) {
-        for (final Constructor<?> constructor : clazz.getConstructors()) {
-            if (constructor.getParameterTypes().length == numParams) {
-                return constructor;
-            }
-        }
-
-        return null;
+        return "https://textures.minecraft.net/texture/" + texture;
     }
 
     public static ItemStack getSkull(String texture) {
@@ -76,14 +51,16 @@ public class SkullTexture {
                     skull = new ItemStack(Material.getMaterial("SKULL_ITEM"), 1, (short) 3);
                 }
 
-                final ItemMeta meta = skull.getItemMeta();
+                final SkullMeta meta = (SkullMeta) skull.getItemMeta();
                 try {
-                    final Object profile = GAME_PROFILE_CONSTRUCTOR.newInstance(UUID.randomUUID(), UUID.randomUUID().toString().substring(17).replace("-", ""));
-                    final Object properties = GET_PROPERTIES.invoke(profile);
-                    INSERT_PROPERTY.invoke(properties, "textures", PROPERTY_CONSTRUCTOR.newInstance("textures", texture));
-                    setFieldValue(meta, "profile", profile);
+                    // old authlib reflection breaks on 26.x (GameProfile is a record now) so using bukkit profile api
+                    final PlayerProfile profile = Bukkit.createPlayerProfile(UUID.randomUUID(), UUID.randomUUID().toString().substring(0, 16).replace("-", ""));
+                    final PlayerTextures textures = profile.getTextures();
+                    textures.setSkin(new URL(skinUrl(texture)));
+                    profile.setTextures(textures);
+                    meta.setOwnerProfile(profile);
                 } catch (Exception e) {
-                    System.err.println("Failed to create fake GameProfile for custom player head:");
+                    System.err.println("Failed to create custom player head:");
                     e.printStackTrace();
                 }
                 skull.setItemMeta(meta);

@@ -10,7 +10,6 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.util.io.BukkitObjectInputStream;
 import org.bukkit.util.io.BukkitObjectOutputStream;
-import org.yaml.snakeyaml.external.biz.base64Coder.Base64Coder;
 
 import java.io.*;
 import java.text.DateFormat;
@@ -115,6 +114,20 @@ public class Utils {
         return result.toString().trim();
     }
 
+    /**
+     * same output as the old snakeyaml Base64Coder.encodeLines (its removed in 26.x)
+     * 76 char lines + line separator so the saved data still loads fine
+     */
+    private static String encodeLines(byte[] bytes) {
+        final String encoded = Base64.getEncoder().encodeToString(bytes);
+        final String separator = System.lineSeparator();
+        final StringBuilder out = new StringBuilder(encoded.length() + encoded.length() / 76 * separator.length() + separator.length());
+        for (int i = 0; i < encoded.length(); i += 76) {
+            out.append(encoded, i, Math.min(i + 76, encoded.length())).append(separator);
+        }
+        return out.toString();
+    }
+
     public static String itemToBase64(ItemStack item) {
         try {
             if (item == null)
@@ -126,7 +139,7 @@ public class Utils {
             dataOutput.writeObject(item);
 
             dataOutput.close();
-            return Base64Coder.encodeLines(outputStream.toByteArray());
+            return encodeLines(outputStream.toByteArray());
         } catch (Exception e) {
             AuctionMaster.plugin.getLogger().warning("Unable to save item stacks. "+ e);
         }
@@ -138,7 +151,7 @@ public class Utils {
             if (data == null || data.equals(""))
                 return null;
 
-            ByteArrayInputStream inputStream = new ByteArrayInputStream(Base64Coder.decodeLines(data));
+            ByteArrayInputStream inputStream = new ByteArrayInputStream(Base64.getMimeDecoder().decode(data));
             BukkitObjectInputStream dataInput = new BukkitObjectInputStream(inputStream);
             Object object = dataInput.readObject();
             if (!(object instanceof ItemStack item))

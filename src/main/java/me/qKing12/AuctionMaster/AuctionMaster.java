@@ -83,6 +83,26 @@ public class AuctionMaster extends JavaPlugin{
             inputType = "anvil";
         else if (!AuctionMaster.plugin.getConfig().getBoolean("use-chat-instead-sign"))
             inputType = "sign";
+
+        // signgui 2.5.4 only goes up to 1.21.8, on newer servers it uses the 1.21.8 wrapper anyway
+        // and breaks when a player opens the sign so we just use the anvil input instead
+        if (inputType.equals("sign") && !signGuiSupported()) {
+            inputType = "anvil";
+            getLogger().warning("Sign input is not supported on this server version, using the anvil input instead. "
+                    + "Set use-anvil-instead-sign or use-chat-instead-sign in config.yml to hide this message.");
+        }
+    }
+
+    private static boolean signGuiSupported() {
+        try {
+            final String[] parts = Bukkit.getBukkitVersion().split("-")[0].split("\\.");
+            final int major = Integer.parseInt(parts[0]);
+            final int minor = parts.length > 1 ? Integer.parseInt(parts[1]) : 0;
+            final int patch = parts.length > 2 ? Integer.parseInt(parts[2]) : 0;
+            return major == 1 && (minor < 21 || (minor == 21 && patch <= 8));
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     private void currencySetup(){
